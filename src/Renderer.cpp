@@ -86,8 +86,6 @@ void Renderer::nanogui_init(GLFWwindow* window)
         }
     });
 
-    gui_1->addGroup("Inverse Kinematics");
-
     is_moving = gui_1->addVariable("Bone Move", m_bone_animation->isMoving);
 
     target_X = gui_1->addVariable("Target X", m_bone_animation->target[0]);
@@ -97,15 +95,6 @@ void Renderer::nanogui_init(GLFWwindow* window)
     endEffector_X = gui_1->addVariable("Current end pos X", m_bone_animation->endEffector[0]);
     endEffector_Y = gui_1->addVariable("Current end pos Y", m_bone_animation->endEffector[1]);
     endEffector_Z = gui_1->addVariable("Current end pos Z", m_bone_animation->endEffector[2]);
-
-    // Renamed button for clarity
-    gui_1->addButton("Reset IK Target", []() {
-        m_bone_animation->resetTarget();
-        target_X->setValue(m_bone_animation->target[0]);
-        target_Y->setValue(m_bone_animation->target[1]);
-        target_Z->setValue(m_bone_animation->target[2]);
-        is_moving->setValue(m_bone_animation->isMoving);
-    });
 
     m_nanogui_screen->setVisible(true);
     m_nanogui_screen->performLayout();
@@ -425,6 +414,11 @@ void Renderer::draw_bones(Shader& shader, Bone_Animation* m_bone_animation)
         return;
 
     m_bone_animation->update(delta_time);
+	
+	if (endEffector_X) endEffector_X->setValue(m_bone_animation->endEffector[0]);
+    if (endEffector_Y) endEffector_Y->setValue(m_bone_animation->endEffector[1]);
+    if (endEffector_Z) endEffector_Z->setValue(m_bone_animation->endEffector[2]);
+
 
     std::vector<glm::mat4> bone_obj_mat = { glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f) };
     for (int i = 0; i < m_bone_animation->tree_depth; i++)
