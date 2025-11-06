@@ -10,6 +10,26 @@ nanogui::Screen* Renderer::m_nanogui_screen = nullptr;
 
 bool Renderer::keys[1024];
 
+nanogui::detail::FormWidget<float>* bone1_X = nullptr;
+nanogui::detail::FormWidget<float>* bone1_Y = nullptr;
+nanogui::detail::FormWidget<float>* bone1_Z = nullptr;
+nanogui::detail::FormWidget<float>* bone2_X = nullptr;
+nanogui::detail::FormWidget<float>* bone2_Y = nullptr;
+nanogui::detail::FormWidget<float>* bone2_Z = nullptr;
+nanogui::detail::FormWidget<float>* bone3_X = nullptr;
+nanogui::detail::FormWidget<float>* bone3_Y = nullptr;
+nanogui::detail::FormWidget<float>* bone3_Z = nullptr;
+
+nanogui::detail::FormWidget<bool>* is_moving = nullptr;
+
+nanogui::detail::FormWidget<float>* target_X = nullptr;
+nanogui::detail::FormWidget<float>* target_Y = nullptr;
+nanogui::detail::FormWidget<float>* target_Z = nullptr;
+
+nanogui::detail::FormWidget<float>* endEffector_X = nullptr;
+nanogui::detail::FormWidget<float>* endEffector_Y = nullptr;
+nanogui::detail::FormWidget<float>* endEffector_Z = nullptr;
+
 Renderer::Renderer()
 {
 }
@@ -26,15 +46,8 @@ void Renderer::nanogui_init(GLFWwindow* window)
 
     glViewport(0, 0, m_camera->width, m_camera->height);
 
-    //glfwSwapInterval(0);
-    //glfwSwapBuffers(window);
-
-    // Create nanogui gui
     nanogui::FormHelper *gui_1 = new nanogui::FormHelper(m_nanogui_screen);
     nanogui::ref<nanogui::Window> nanoguiWindow_1 = gui_1->addWindow(Eigen::Vector2i(0, 0), "Nanogui control bar_1");
-
-    //screen->setPosition(Eigen::Vector2i(-width/2 + 200, -height/2 + 300));
-
     gui_1->addGroup("Camera Position");
     static auto camera_x_widget = gui_1->addVariable("X", m_camera->position[0]);
     static auto camera_y_widget = gui_1->addVariable("Y", m_camera->position[1]);
@@ -71,6 +84,27 @@ void Renderer::nanogui_init(GLFWwindow* window)
         for (int i = 1; i <= 3 && i < (int)m_bone_animation->rotation_degree_vector.size(); ++i) {
             m_bone_animation->rotation_degree_vector[i] = glm::vec3(0.0f, 0.0f, 0.0f);
         }
+    });
+
+    gui_1->addGroup("Inverse Kinematics");
+
+    is_moving = gui_1->addVariable("Bone Move", m_bone_animation->isMoving);
+
+    target_X = gui_1->addVariable("Target X", m_bone_animation->target[0]);
+    target_Y = gui_1->addVariable("Target Y", m_bone_animation->target[1]);
+    target_Z = gui_1->addVariable("Target Z", m_bone_animation->target[2]);
+
+    endEffector_X = gui_1->addVariable("Current end pos X", m_bone_animation->endEffector[0]);
+    endEffector_Y = gui_1->addVariable("Current end pos Y", m_bone_animation->endEffector[1]);
+    endEffector_Z = gui_1->addVariable("Current end pos Z", m_bone_animation->endEffector[2]);
+
+    // Renamed button for clarity
+    gui_1->addButton("Reset IK Target", []() {
+        m_bone_animation->resetTarget();
+        target_X->setValue(m_bone_animation->target[0]);
+        target_Y->setValue(m_bone_animation->target[1]);
+        target_Z->setValue(m_bone_animation->target[2]);
+        is_moving->setValue(m_bone_animation->isMoving);
     });
 
     m_nanogui_screen->setVisible(true);
@@ -392,31 +426,20 @@ void Renderer::draw_bones(Shader& shader, Bone_Animation* m_bone_animation)
 
     m_bone_animation->update(delta_time);
 
-    glm::mat4 joint_world = glm::translate(glm::mat4(1.0f), m_bone_animation->root_position);
-
-    size_t bone_count = std::min(m_bone_animation->scale_vector.size(), m_bone_animation->rotation_degree_vector.size());
-
-    for (size_t i = 0; i < bone_count; ++i)
+    std::vector<glm::mat4> bone_obj_mat = { glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f), glm::mat4(1.0f) };
+    for (int i = 0; i < m_bone_animation->tree_depth; i++)
     {
-        glm::vec3 s = m_bone_animation->scale_vector[i];
-        glm::vec3 rot = m_bone_animation->rotation_degree_vector[i]; // degrees
-
-        glm::mat4 local_rot = glm::mat4(1.0f);
-        if (rot.x != 0.0f) local_rot = glm::rotate(local_rot, glm::radians(rot.x), glm::vec3(1.0f, 0.0f, 0.0f));
-        if (rot.y != 0.0f) local_rot = glm::rotate(local_rot, glm::radians(rot.y), glm::vec3(0.0f, 1.0f, 0.0f));
-        if (rot.z != 0.0f) local_rot = glm::rotate(local_rot, glm::radians(rot.z), glm::vec3(0.0f, 0.0f, 1.0f));
-
-       	glm::mat4 bone_world = joint_world;           // move to joint
-        bone_world = bone_world * local_rot;          // rotate about joint
-        bone_world = bone_world * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, s.y * 0.5f, 0.0f)); // move to center of scaled cube
-        bone_world = bone_world * glm::scale(glm::mat4(1.0f), s); // scale
-
-        glUniformMatrix4fv(glGetUniformLocation(shader.program, "model"), 1, GL_FALSE, glm::value_ptr(bone_world));
-        bone_obj->obj_color = m_bone_animation->colors[i % m_bone_animation->colors.size()];
+        bone_obj_mat[i] = glm::scale(m_bone_animation->bone_mat[i], m_bone_animation->scale_vector[i]);
+        glUniformMatrix4fv(glGetUniformLocation(shader.program, "model"), 1, GL_FALSE, glm::value_ptr(bone_obj_mat[i]));
+        bone_obj->obj_color = m_bone_animation->colors[i];
         draw_object(shader, *bone_obj);
-
-        joint_world = joint_world * local_rot * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, s.y, 0.0f));
     }
+    
+    glm::mat4 target_obj_mat = glm::mat4(1.0f);
+    target_obj_mat = glm::translate(target_obj_mat, m_bone_animation->target);
+    glUniformMatrix4fv(glGetUniformLocation(shader.program, "model"), 1, GL_FALSE, glm::value_ptr(target_obj_mat));
+    bone_obj->obj_color = m_bone_animation->target_colors;
+    draw_object(shader, *bone_obj);
 }
 
 void Renderer::bind_vaovbo(Object &cur_obj)

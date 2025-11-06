@@ -71,5 +71,6 @@ public:
 
 	void setup_uniform_values(Shader& shader);
 	void scene_reset();
+	void update_value();
 };
 
